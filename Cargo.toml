@@ -1,0 +1,7 @@
+[package]
+authors = ["Ian Johnson <ianprime0509@gmail.com>"]
+name = "nilhecke"
+version = "0.1.0"
+
+[dependencies]
+error-chain = "0.10.0"
