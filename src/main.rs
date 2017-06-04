@@ -3,10 +3,11 @@ extern crate error_chain;
 
 extern crate nilhecke;
 
+use std::collections::HashSet;
 use std::io::{self, Write};
 
 use nilhecke::errors::*;
-use nilhecke::OddPolynomial;
+use nilhecke::{OddMonomial, OddPolynomial};
 
 const VERSION: &str = "0.1.0";
 
@@ -41,6 +42,7 @@ fn run() -> Result<()> {
             "add" => add()?,
             "mul" => mul()?,
             "p" => p()?,
+            "schud" => schud()?,
             "" | "quit" | "bye" => break,
             _ => println!("unknown function"),
         }
@@ -106,6 +108,37 @@ fn p() -> Result<()> {
     }
 
     println!("result: {}", poly);
+
+    Ok(())
+}
+
+fn schud() -> Result<()> {
+    let n = prompt("n:").parse::<u32>().chain_err(|| "invalid number")?;
+    if n < 2 {
+        bail!("invalid value for n");
+    }
+    let deltad = OddMonomial::deltad(n);
+    let degree = deltad.degree();
+    let mut schuberts = HashSet::new();
+    schuberts.insert(OddPolynomial::from_monomial(deltad));
+
+    for _ in 0..degree {
+        let mut new = HashSet::new();
+        for poly in &schuberts {
+            for n in 1..n {
+                new.insert(poly.ps(n));
+            }
+            new.insert(poly.pd(n));
+        }
+        for poly in new {
+            schuberts.insert(poly);
+        }
+    }
+
+    println!("schubert polynomials:");
+    for poly in schuberts {
+        println!("{}", poly);
+    }
 
     Ok(())
 }
