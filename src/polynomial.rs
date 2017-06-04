@@ -1,4 +1,5 @@
-use std::cmp;
+use std::cmp::{self, PartialEq, Eq};
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::{Add, Mul};
 use std::str::FromStr;
@@ -15,7 +16,7 @@ pub struct OddMonomial {
 }
 
 impl OddMonomial {
-    pub fn new(coefficient: i32, powers: Vec<u32>) -> OddMonomial {
+    pub fn new(coefficient: i32, powers: Vec<u32>) -> Self {
         OddMonomial {
             coefficient,
             powers,
@@ -23,21 +24,30 @@ impl OddMonomial {
     }
 
     /// Return a single variable
-    pub fn x(n: u32) -> OddMonomial {
+    pub fn x(n: u32) -> Self {
         let mut powers = Vec::new();
         for _ in 0..n - 1 {
             powers.push(0);
         }
         powers.push(1);
+        OddMonomial::new(1, powers)
+    }
 
-        OddMonomial {
-            coefficient: 1,
-            powers,
+    /// `\dodd{\delta}_n`
+    pub fn deltad(n: u32) -> Self {
+        let mut powers = Vec::new();
+        for i in 0..n {
+            powers.push(2 * n - 2 * i - 2);
         }
+        OddMonomial::new(1, powers)
     }
 
     pub fn is_zero(&self) -> bool {
         self.coefficient == 0
+    }
+
+    pub fn degree(&self) -> u32 {
+        self.powers.iter().sum()
     }
 
     /// `\sso_n`
@@ -149,16 +159,23 @@ impl OddMonomial {
         &(&OddPolynomial::from_monomial(OddMonomial::x(pos + 1).sd(n)) * &g.pd(n))
     }
 
+    /// Whether the `powers` vectors of the monomials are equal, ignoring trailing zeros.
+    fn powers_eq(&self, other: &Self) -> bool {
+        for i in 0..cmp::max(self.powers.len(), other.powers.len()) {
+            if self.powers.get(i).unwrap_or(&0) != other.powers.get(i).unwrap_or(&0) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn fmt_no_sign(&self, f: &mut Formatter) -> FmtResult {
         if self.is_zero() {
             return write!(f, "0");
         }
 
         // Position of the last nonzero power
-        let pos = match self.powers.iter().rposition(|&power| power != 0) {
-            Some(pos) => pos,
-            None => return write!(f, "{}", self.coefficient),
-        };
+        let pos = self.powers.iter().rposition(|&power| power != 0);
 
         if self.coefficient != 1 && self.coefficient != -1 {
             if self.coefficient < 0 {
@@ -166,15 +183,19 @@ impl OddMonomial {
             } else {
                 write!(f, "{}", self.coefficient)?;
             }
+        } else if pos == None {
+            write!(f, "1")?;
         }
 
-        for (i, &power) in self.powers.iter().enumerate().take(pos) {
-            if power != 0 {
-                write!(f, "x_{}^{} ", i + 1, power)?;
+        if let Some(pos) = pos {
+            for (i, &power) in self.powers.iter().enumerate().take(pos) {
+                if power != 0 {
+                    write!(f, "x_{}^{} ", i + 1, power)?;
+                }
             }
-        }
 
-        write!(f, "x_{}^{}", pos + 1, self.powers[pos])?;
+            write!(f, "x_{}^{}", pos + 1, self.powers[pos])?;
+        }
 
         Ok(())
     }
@@ -189,6 +210,14 @@ impl Display for OddMonomial {
         self.fmt_no_sign(f)
     }
 }
+
+impl PartialEq for OddMonomial {
+    fn eq(&self, other: &Self) -> bool {
+        self.powers_eq(other) && self.coefficient == other.coefficient
+    }
+}
+
+impl Eq for OddMonomial {}
 
 impl<'a, 'b> Mul<&'a OddMonomial> for &'b OddMonomial {
     type Output = OddMonomial;
@@ -274,16 +303,7 @@ impl OddPolynomial {
         }
 
         // Try to add to an existing term if possible
-        let pos = self.terms
-            .iter()
-            .position(|term| {
-                for i in 0..cmp::max(term.powers.len(), other.powers.len()) {
-                    if term.powers.get(i).unwrap_or(&0) != other.powers.get(i).unwrap_or(&0) {
-                        return false;
-                    }
-                }
-                true
-            });
+        let pos = self.terms.iter().position(|term| term.powers_eq(other));
         if let Some(pos) = pos {
             self.terms[pos].coefficient += other.coefficient;
             if self.terms[pos].is_zero() {
@@ -344,6 +364,29 @@ impl FromStr for OddPolynomial {
         Ok(poly)
     }
 }
+
+impl PartialEq for OddPolynomial {
+    fn eq(&self, other: &OddPolynomial) -> bool {
+        // This is an absolutely terrible implementation and should be changed at some point
+        let terms1 = {
+            let mut hs = HashSet::with_capacity(self.terms.len());
+            for term in &self.terms {
+                hs.insert(term);
+            }
+            hs
+        };
+        let terms2 = {
+            let mut hs = HashSet::with_capacity(other.terms.len());
+            for term in &other.terms {
+                hs.insert(term);
+            }
+            hs
+        };
+        terms1 == terms2
+    }
+}
+
+impl Eq for OddPolynomial {}
 
 impl<'a, 'b> Add<&'a OddPolynomial> for &'b OddPolynomial {
     type Output = OddPolynomial;
